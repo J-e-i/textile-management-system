@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -8,12 +8,17 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Eye, Send, Download } from "lucide-react";
+import { Eye, Send, Download, Loader2 } from "lucide-react";
+import { getAllQuotations, createQuotation, getAllOrders, updateOrderStatus } from "@/lib/business";
+import type { Quotation, Order } from "@/lib/business";
 
 const AdminQuotations = () => {
   const { toast } = useToast();
+  const [loading, setLoading] = useState(true);
   const [isQuoteDialogOpen, setIsQuoteDialogOpen] = useState(false);
   const [selectedOrder, setSelectedOrder] = useState<any>(null);
+  const [quotations, setQuotations] = useState<Quotation[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
 
   const [quoteForm, setQuoteForm] = useState({
     pricePerUnit: "",
@@ -22,15 +27,31 @@ const AdminQuotations = () => {
     validityDate: "",
   });
 
-  const quotations = [
-    { id: "QT-2024-001", orderId: "ORD-2024-010", buyer: "Metro Garments Ltd", fabric: "Stretch Denim", quantity: "2,000 meters", amount: "₹285,000", status: "Approved", date: "2024-01-16" },
-    { id: "QT-2024-002", orderId: "ORD-2024-011", buyer: "Fashion Hub Exports", fabric: "Polyester Crepe", quantity: "1,200 meters", amount: "₹137,520", status: "Pending", date: "2024-01-17" },
-    { id: "QT-2024-003", orderId: "ORD-2024-009", buyer: "Uniforms Direct", fabric: "Cotton-Poly Blend", quantity: "800 meters", amount: "₹92,360", status: "Approved", date: "2024-01-15" },
-  ];
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [quotationsData, ordersData] = await Promise.all([
+          getAllQuotations(),
+          getAllOrders()
+        ]);
+        
+        setQuotations(quotationsData);
+        setOrders(ordersData);
+      } catch (error: any) {
+        toast({
+          title: "Error",
+          description: "Failed to load quotations",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const pendingOrders = [
-    { id: "ORD-2024-012", buyer: "ABC Textiles Ltd", fabric: "Premium Cotton Twill", gsm: "180-220", color: "Navy Blue", quantity: "500", unit: "meters" },
-  ];
+    fetchData();
+  }, [toast]);
+
+  const pendingOrders = orders.filter(o => o.status === 'PENDING');
 
   const handleQuoteChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setQuoteForm(prev => ({
@@ -45,13 +66,64 @@ const AdminQuotations = () => {
     setIsQuoteDialogOpen(true);
   };
 
-  const handleSubmitQuote = (e: React.FormEvent) => {
+  const handleSubmitQuote = async (e: React.FormEvent) => {
     e.preventDefault();
-    toast({
-      title: "Quotation Sent",
-      description: `Quotation for ${selectedOrder?.id} has been sent to the buyer.`,
-    });
-    setIsQuoteDialogOpen(false);
+    
+    if (!selectedOrder || !quoteForm.pricePerUnit || !quoteForm.validityDate) {
+      toast({
+        title: "Error",
+        description: "Please fill in all required fields",
+        variant: "destructive",
+      });
+      return;
+    }
+
+    try {
+      const quantity = selectedOrder.quantity;
+      const price = parseFloat(quoteForm.pricePerUnit);
+      const taxRate = parseFloat(quoteForm.taxRate);
+      const delivery = parseFloat(quoteForm.deliveryCharges || "0");
+      
+      const subtotal = quantity * price;
+      const tax = subtotal * (taxRate / 100);
+      const total = subtotal + tax + delivery;
+
+      // Create quotation
+      const newQuotation = await createQuotation({
+        order_id: selectedOrder.id,
+        quoted_price: total,
+        valid_until: quoteForm.validityDate,
+        status: 'ACTIVE'
+      });
+
+      // Update order status
+      await updateOrderStatus(selectedOrder.id, 'QUOTED');
+
+      // Update local state
+      setQuotations(prev => [newQuotation, ...prev]);
+      setOrders(prev => prev.map(o => 
+        o.id === selectedOrder.id ? { ...o, status: 'QUOTED' as const } : o
+      ));
+
+      toast({
+        title: "Quotation Created",
+        description: `Quotation for ${selectedOrder.id.substring(0, 8).toUpperCase()} has been created.`,
+      });
+      
+      setIsQuoteDialogOpen(false);
+      setQuoteForm({
+        pricePerUnit: "",
+        taxRate: "18",
+        deliveryCharges: "",
+        validityDate: "",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: "Failed to create quotation",
+        variant: "destructive",
+      });
+    }
   };
 
   const calculateTotal = () => {
@@ -71,8 +143,25 @@ const AdminQuotations = () => {
   };
 
   const getStatusClass = (status: string) => {
-    return status === "Approved" ? "status-approved" : "status-pending";
+    switch (status) {
+      case "ACTIVE":
+        return "status-quoted";
+      case "ACCEPTED":
+        return "status-approved";
+      case "EXPIRED":
+        return "status-rejected";
+      default:
+        return "bg-muted text-muted-foreground";
+    }
   };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -91,11 +180,11 @@ const AdminQuotations = () => {
               <div key={order.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-warning/5 rounded-lg border border-warning/20">
                 <div>
                   <div className="flex items-center gap-2 mb-1">
-                    <span className="font-semibold text-foreground">{order.id}</span>
+                    <span className="font-semibold text-foreground">{order.id.substring(0, 8).toUpperCase()}</span>
                     <span className="status-badge status-pending">Needs Quote</span>
                   </div>
                   <p className="text-sm text-muted-foreground">
-                    {order.buyer} • {order.fabric} ({order.gsm} GSM, {order.color}) • {order.quantity} {order.unit}
+                    {(order as any).profiles?.company_name || 'Unknown Buyer'} • {(order as any).products?.name || 'Unknown Product'} • {order.quantity} meters
                   </p>
                 </div>
                 <Button onClick={() => handleCreateQuote(order)}>
@@ -119,26 +208,26 @@ const AdminQuotations = () => {
               <div className="bg-muted/50 rounded-lg p-4 space-y-2 text-sm">
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Order ID</span>
-                  <span className="font-medium">{selectedOrder.id}</span>
+                  <span className="font-medium">{selectedOrder.id.substring(0, 8).toUpperCase()}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Buyer</span>
-                  <span className="font-medium">{selectedOrder.buyer}</span>
+                  <span className="font-medium">{(selectedOrder as any).profiles?.company_name || 'Unknown Buyer'}</span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-muted-foreground">Fabric</span>
-                  <span className="font-medium">{selectedOrder.fabric}</span>
+                  <span className="text-muted-foreground">Product</span>
+                  <span className="font-medium">{(selectedOrder as any).products?.name || 'Unknown Product'}</span>
                 </div>
                 <div className="flex justify-between">
                   <span className="text-muted-foreground">Quantity</span>
-                  <span className="font-medium">{selectedOrder.quantity} {selectedOrder.unit}</span>
+                  <span className="font-medium">{selectedOrder.quantity} meters</span>
                 </div>
               </div>
 
               {/* Pricing Form */}
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label className="label-enterprise">Price per {selectedOrder.unit?.slice(0, -1)} (₹) *</label>
+                  <label className="label-enterprise">Price per meter (₹) *</label>
                   <Input
                     name="pricePerUnit"
                     type="number"
@@ -240,12 +329,12 @@ const AdminQuotations = () => {
             <tbody>
               {quotations.map((quote) => (
                 <tr key={quote.id}>
-                  <td className="font-medium text-foreground">{quote.id}</td>
-                  <td>{quote.orderId}</td>
-                  <td>{quote.buyer}</td>
-                  <td>{quote.fabric}</td>
-                  <td>{quote.quantity}</td>
-                  <td className="font-medium text-foreground">{quote.amount}</td>
+                  <td className="font-medium text-foreground">{quote.id.substring(0, 8).toUpperCase()}</td>
+                  <td>{(quote as any).orders?.id.substring(0, 8).toUpperCase() || 'N/A'}</td>
+                  <td>{(quote as any).orders?.profiles?.company_name || 'Unknown Buyer'}</td>
+                  <td>{(quote as any).orders?.products?.name || 'Unknown Product'}</td>
+                  <td>{(quote as any).orders?.quantity || 'N/A'} meters</td>
+                  <td className="font-medium text-foreground">₹{quote.quoted_price.toFixed(2)}</td>
                   <td>
                     <span className={`status-badge ${getStatusClass(quote.status)}`}>
                       {quote.status}

@@ -1,39 +1,136 @@
+import { useState, useEffect } from "react";
 import { Link } from "react-router-dom";
-import { Users, Package, FileText, Boxes, ArrowRight, AlertCircle, CheckCircle, Clock } from "lucide-react";
+import { Users, Package, FileText, Boxes, ArrowRight, AlertCircle, CheckCircle, Clock, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useToast } from "@/hooks/use-toast";
+import { getAllProfiles, getAllOrders, getAllQuotations, updateProfileApproval, updateOrderStatus, createQuotation } from "@/lib/business";
+import type { Profile, Order, Quotation } from "@/lib/business";
 
 const AdminDashboard = () => {
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(true);
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [orders, setOrders] = useState<Order[]>([]);
+  const [quotations, setQuotations] = useState<Quotation[]>([]);
+
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const [profilesData, ordersData, quotationsData] = await Promise.all([
+          getAllProfiles(),
+          getAllOrders(),
+          getAllQuotations()
+        ]);
+        
+        setProfiles(profilesData);
+        setOrders(ordersData);
+        setQuotations(quotationsData);
+      } catch (error: any) {
+        toast({
+          title: "Error",
+          description: "Failed to load dashboard data",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchData();
+  }, [toast]);
+
+  // Calculate stats
+  const totalBuyers = profiles.filter(p => p.role === 'buyer').length;
+  const pendingApprovals = profiles.filter(p => p.approval_status === 'PENDING' && p.role === 'buyer').length;
+  const newOrders = orders.filter(o => o.status === 'PENDING').length;
+  const activeOrders = orders.filter(o => ['QUOTED', 'AWAITING_PAYMENT', 'PAID', 'PROCESSING'].includes(o.status)).length;
+
   const stats = [
-    { label: "Total Buyers", value: "156", icon: Users, color: "bg-primary/10 text-primary", change: "+12 this month" },
-    { label: "Pending Approvals", value: "8", icon: AlertCircle, color: "bg-warning/10 text-warning", change: "Needs attention" },
-    { label: "New Orders", value: "23", icon: Package, color: "bg-info/10 text-info", change: "+5 today" },
-    { label: "Active Orders", value: "47", icon: CheckCircle, color: "bg-success/10 text-success", change: "In production" },
+    { label: "Total Buyers", value: totalBuyers.toString(), icon: Users, color: "bg-primary/10 text-primary", change: "Registered buyers" },
+    { label: "Pending Approvals", value: pendingApprovals.toString(), icon: AlertCircle, color: "bg-warning/10 text-warning", change: "Needs attention" },
+    { label: "New Orders", value: newOrders.toString(), icon: Package, color: "bg-info/10 text-info", change: "Awaiting quotes" },
+    { label: "Active Orders", value: activeOrders.toString(), icon: CheckCircle, color: "bg-success/10 text-success", change: "In progress" },
   ];
 
-  const pendingBuyers = [
-    { id: "1", businessName: "Fashion Hub Exports", gst: "27AABCU9603R1ZM", email: "procurement@fashionhub.com", date: "2024-01-18" },
-    { id: "2", businessName: "Metro Garments Ltd", gst: "33AADCM2345Q1ZP", email: "orders@metrogarments.in", date: "2024-01-17" },
-    { id: "3", businessName: "Uniforms Direct", gst: "07AAECN9876P1ZX", email: "supply@uniformsdirect.com", date: "2024-01-16" },
-  ];
+  const pendingBuyers = profiles
+    .filter(p => p.approval_status === 'PENDING' && p.role === 'buyer')
+    .slice(0, 3)
+    .map(p => ({
+      id: p.id,
+      businessName: p.company_name || 'Unknown Company',
+      gst: p.gst_number || 'N/A',
+      email: p.email,
+      date: new Date(p.created_at).toLocaleDateString()
+    }));
 
-  const recentOrders = [
-    { id: "ORD-2024-012", buyer: "ABC Textiles Ltd", fabric: "Premium Cotton Twill", quantity: "500 meters", status: "Pending Quote" },
-    { id: "ORD-2024-011", buyer: "Fashion Hub Exports", fabric: "Polyester Crepe", quantity: "1,200 meters", status: "Quoted" },
-    { id: "ORD-2024-010", buyer: "Metro Garments Ltd", fabric: "Stretch Denim", quantity: "2,000 meters", status: "In Production" },
-  ];
+  const recentOrders = orders
+    .slice(0, 3)
+    .map(o => ({
+      id: o.id.substring(0, 8).toUpperCase(),
+      buyer: (o as any).profiles?.company_name || 'Unknown Buyer',
+      fabric: (o as any).products?.name || 'Unknown Product',
+      quantity: `${o.quantity} meters`,
+      status: o.status.replace('_', ' ')
+    }));
+
+  const handleApproveBuyer = async (profileId: string) => {
+    try {
+      await updateProfileApproval(profileId, 'APPROVED');
+      setProfiles(profiles.map(p => 
+        p.id === profileId ? { ...p, approval_status: 'APPROVED' as const } : p
+      ));
+      toast({
+        title: "Success",
+        description: "Buyer approved successfully",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: "Failed to approve buyer",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleRejectBuyer = async (profileId: string) => {
+    try {
+      await updateProfileApproval(profileId, 'REJECTED');
+      setProfiles(profiles.map(p => 
+        p.id === profileId ? { ...p, approval_status: 'REJECTED' as const } : p
+      ));
+      toast({
+        title: "Success",
+        description: "Buyer rejected successfully",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: "Failed to reject buyer",
+        variant: "destructive",
+      });
+    }
+  };
 
   const getStatusClass = (status: string) => {
     switch (status) {
-      case "In Production":
+      case "PROCESSING":
         return "status-approved";
-      case "Quoted":
+      case "QUOTED":
         return "status-quoted";
-      case "Pending Quote":
+      case "PENDING":
         return "status-pending";
       default:
         return "bg-muted text-muted-foreground";
     }
   };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -81,8 +178,19 @@ const AdminDashboard = () => {
                   <p className="text-sm text-muted-foreground truncate">{buyer.email}</p>
                 </div>
                 <div className="flex gap-2 ml-4">
-                  <Button size="sm" variant="outline">Reject</Button>
-                  <Button size="sm">Approve</Button>
+                  <Button 
+                    size="sm" 
+                    variant="outline" 
+                    onClick={() => handleRejectBuyer(buyer.id)}
+                  >
+                    Reject
+                  </Button>
+                  <Button 
+                    size="sm" 
+                    onClick={() => handleApproveBuyer(buyer.id)}
+                  >
+                    Approve
+                  </Button>
                 </div>
               </div>
             ))}

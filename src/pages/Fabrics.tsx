@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { 
@@ -8,7 +9,11 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, Filter } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { Search, Filter, Loader2 } from "lucide-react";
+import { getProducts } from "@/lib/business";
+import type { Product } from "@/lib/business";
+import { useAuth } from "@/contexts/AuthContext";
 
 interface Fabric {
   id: string;
@@ -107,16 +112,42 @@ const fabrics: Fabric[] = [
 const categories = ["All", "Cotton", "Polyester", "Blended", "Denim", "Silk", "Linen", "Technical"];
 
 const Fabrics = () => {
+  const { user } = useAuth();
+  const { toast } = useToast();
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedCategory, setSelectedCategory] = useState("All");
 
-  const filteredFabrics = fabrics.filter((fabric) => {
-    const matchesSearch = fabric.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      fabric.composition.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      fabric.useCase.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesCategory = selectedCategory === "All" || fabric.category === selectedCategory;
+  useEffect(() => {
+    const fetchProducts = async () => {
+      try {
+        const data = await getProducts();
+        setProducts(data);
+      } catch (error: any) {
+        toast({
+          title: "Error",
+          description: "Failed to load products. Please try again.",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchProducts();
+  }, [toast]);
+
+  const filteredProducts = products.filter((product) => {
+    const matchesSearch = product.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      product.description?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      product.gsm?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      product.color?.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesCategory = selectedCategory === "All" || product.color === selectedCategory;
     return matchesSearch && matchesCategory;
   });
+
+  const categories = ["All", ...Array.from(new Set(products.map(p => p.color).filter(Boolean)))];
 
   return (
     <div className="py-12 lg:py-16">
@@ -159,74 +190,94 @@ const Fabrics = () => {
 
         {/* Results count */}
         <p className="text-sm text-muted-foreground mb-6">
-          Showing {filteredFabrics.length} of {fabrics.length} fabrics
+          Showing {filteredProducts.length} of {products.length} products
         </p>
 
-        {/* Fabric Grid */}
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {filteredFabrics.map((fabric, index) => (
-            <div
-              key={fabric.id}
-              className="card-enterprise overflow-hidden animate-fade-in"
-              style={{ animationDelay: `${index * 0.05}s` }}
-            >
-              {/* Fabric Image Placeholder */}
-              <div className="h-48 bg-gradient-to-br from-muted to-muted/50 flex items-center justify-center">
-                <div className="text-center">
-                  <div className="w-16 h-16 mx-auto mb-2 rounded-full bg-primary/10 flex items-center justify-center">
-                    <span className="text-2xl font-bold text-primary">
-                      {fabric.name.charAt(0)}
-                    </span>
+        {/* Loading State */}
+        {loading ? (
+          <div className="flex justify-center items-center py-12">
+            <Loader2 className="h-8 w-8 animate-spin text-primary" />
+          </div>
+        ) : (
+          /* Product Grid */
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+            {filteredProducts.map((product, index) => (
+              <div
+                key={product.id}
+                className="card-enterprise overflow-hidden animate-fade-in"
+                style={{ animationDelay: `${index * 0.05}s` }}
+              >
+                {/* Product Image */}
+                {product.image_url ? (
+                  <img 
+                    src={product.image_url} 
+                    alt={product.name}
+                    className="h-48 w-full object-cover"
+                  />
+                ) : (
+                  <div className="h-48 bg-gradient-to-br from-muted to-muted/50 flex items-center justify-center">
+                    <div className="text-center">
+                      <div className="w-16 h-16 mx-auto mb-2 rounded-full bg-primary/10 flex items-center justify-center">
+                        <span className="text-2xl font-bold text-primary">
+                          {product.name.charAt(0)}
+                        </span>
+                      </div>
+                      <span className="text-xs text-muted-foreground">Fabric</span>
+                    </div>
                   </div>
-                  <span className="text-xs text-muted-foreground">{fabric.category}</span>
+                )}
+
+                {/* Product Details */}
+                <div className="p-5">
+                  <h3 className="font-semibold text-foreground mb-3">{product.name}</h3>
+                  
+                  <div className="space-y-2 mb-4">
+                    {product.gsm && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">GSM</span>
+                        <span className="font-medium text-foreground">{product.gsm}</span>
+                      </div>
+                    )}
+                    {product.color && (
+                      <div className="flex justify-between text-sm">
+                        <span className="text-muted-foreground">Color</span>
+                        <span className="font-medium text-foreground">{product.color}</span>
+                      </div>
+                    )}
+                    <div className="flex justify-between text-sm">
+                      <span className="text-muted-foreground">Stock</span>
+                      <span className="font-medium text-foreground">{product.stock_quantity}m</span>
+                    </div>
+                  </div>
+
+                  {product.description && (
+                    <p className="text-sm text-muted-foreground mb-4 line-clamp-2">
+                      {product.description}
+                    </p>
+                  )}
+
+                  {user ? (
+                    <Link to="/buyer/new-order">
+                      <Button className="w-full">
+                        Request Quote
+                      </Button>
+                    </Link>
+                  ) : (
+                    <Link to="/register">
+                      <Button className="w-full" variant="outline">
+                        Register to Order
+                      </Button>
+                    </Link>
+                  )}
                 </div>
               </div>
+            ))}
+          </div>
+        )}
 
-              {/* Fabric Details */}
-              <div className="p-5">
-                <h3 className="font-semibold text-foreground mb-3">{fabric.name}</h3>
-                
-                <div className="space-y-2 mb-4">
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">GSM</span>
-                    <span className="font-medium text-foreground">{fabric.gsm}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Composition</span>
-                    <span className="font-medium text-foreground text-right max-w-[60%]">{fabric.composition}</span>
-                  </div>
-                  <div className="flex justify-between text-sm">
-                    <span className="text-muted-foreground">Use Case</span>
-                    <span className="font-medium text-foreground text-right max-w-[60%]">{fabric.useCase}</span>
-                  </div>
-                </div>
-
-                {/* Colors */}
-                <div className="mb-4">
-                  <span className="text-xs text-muted-foreground block mb-2">Available Colors</span>
-                  <div className="flex flex-wrap gap-1">
-                    {fabric.colors.map((color) => (
-                      <span
-                        key={color}
-                        className="text-xs px-2 py-1 bg-muted rounded-md text-foreground"
-                      >
-                        {color}
-                      </span>
-                    ))}
-                  </div>
-                </div>
-
-                <Button className="w-full" variant="outline">
-                  Request Bulk Quote
-                </Button>
-              </div>
-            </div>
-          ))}
-        </div>
-
-        {filteredFabrics.length === 0 && (
+        {!loading && filteredProducts.length === 0 && (
           <div className="text-center py-12">
-            <p className="text-muted-foreground">No fabrics found matching your criteria.</p>
+            <p className="text-muted-foreground">No products found matching your criteria.</p>
           </div>
         )}
 

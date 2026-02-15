@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -9,59 +9,119 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { useToast } from "@/hooks/use-toast";
-import { Search, CheckCircle, XCircle, Eye } from "lucide-react";
+import { Search, CheckCircle, XCircle, Eye, Loader2 } from "lucide-react";
+import { getAllProfiles, updateProfileApproval } from "@/lib/business";
+import type { Profile } from "@/lib/business";
 
 const AdminBuyers = () => {
   const { toast } = useToast();
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [profiles, setProfiles] = useState<Profile[]>([]);
 
-  const [buyers, setBuyers] = useState([
-    { id: "1", businessName: "ABC Textiles Ltd", gst: "22AAAAA0000A1Z5", contactPerson: "Rajesh Kumar", email: "rajesh@abctextiles.com", phone: "+91 98765 43210", status: "Approved", date: "2024-01-10" },
-    { id: "2", businessName: "Fashion Hub Exports", gst: "27AABCU9603R1ZM", contactPerson: "Priya Sharma", email: "priya@fashionhub.com", phone: "+91 98765 43211", status: "Pending", date: "2024-01-18" },
-    { id: "3", businessName: "Metro Garments Ltd", gst: "33AADCM2345Q1ZP", contactPerson: "Amit Patel", email: "amit@metrogarments.in", phone: "+91 98765 43212", status: "Pending", date: "2024-01-17" },
-    { id: "4", businessName: "Uniforms Direct", gst: "07AAECN9876P1ZX", contactPerson: "Sunita Verma", email: "sunita@uniformsdirect.com", phone: "+91 98765 43213", status: "Pending", date: "2024-01-16" },
-    { id: "5", businessName: "Global Fabrics Inc", gst: "09AAGCG1234H1ZY", contactPerson: "Vikram Singh", email: "vikram@globalfabrics.com", phone: "+91 98765 43214", status: "Approved", date: "2024-01-05" },
-    { id: "6", businessName: "Textile World", gst: "36AABCT5678M1ZK", contactPerson: "Neha Gupta", email: "neha@textileworld.in", phone: "+91 98765 43215", status: "Rejected", date: "2024-01-12" },
-  ]);
+  useEffect(() => {
+    const fetchProfiles = async () => {
+      try {
+        const data = await getAllProfiles();
+        setProfiles(data);
+      } catch (error: any) {
+        toast({
+          title: "Error",
+          description: "Failed to load buyer profiles",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
 
-  const filteredBuyers = buyers.filter((buyer) => {
-    const matchesSearch = buyer.businessName.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      buyer.gst.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      buyer.email.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === "all" || buyer.status.toLowerCase() === statusFilter;
+    fetchProfiles();
+  }, [toast]);
+
+  // Filter only buyers
+  const buyers = profiles.filter(p => p.role === 'buyer');
+
+  // Show active buyers (PENDING and APPROVED, hide REJECTED from main list)
+  const activeBuyers = buyers.filter(b => b.approval_status !== 'REJECTED');
+
+  // Choose base list depending on selected status so "all", "pending", and "rejected" work correctly
+  const baseList = statusFilter === 'all' ? buyers : 
+                  statusFilter === 'pending' ? buyers.filter(b => b.approval_status === 'PENDING') :
+                  statusFilter === 'rejected' ? buyers.filter(b => b.approval_status === 'REJECTED') :
+                  activeBuyers;
+
+  const filteredBuyers = baseList.filter((buyer) => {
+    const matchesSearch = buyer.company_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      buyer.gst_number?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      buyer.email.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      buyer.full_name?.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesStatus = statusFilter === "all" || buyer.approval_status?.toLowerCase() === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
-  const handleApprove = (id: string) => {
-    setBuyers(prev => prev.map(b => b.id === id ? { ...b, status: "Approved" } : b));
-    toast({
-      title: "Buyer Approved",
-      description: "The buyer account has been activated.",
-    });
+  const handleApprove = async (id: string) => {
+    try {
+      const { data, error } = await supabase
+        .rpc('approve_buyer_simple', { 
+          buyer_id: id,
+          admin_email: 'admin@textile-connect.com'
+        });
+    
+      if (error) {
+        toast({ title: "Error", description: error.message });
+      } else {
+        toast({ 
+          title: "Success", 
+          description: data.message || "Buyer approved and email confirmed!" 
+        });
+        fetchBuyers(); // Refresh the list
+      }
+    } catch (error: any) {
+      toast({ title: "Error", description: "Failed to approve buyer" });
+    }
   };
 
-  const handleReject = (id: string) => {
-    setBuyers(prev => prev.map(b => b.id === id ? { ...b, status: "Rejected" } : b));
-    toast({
-      title: "Buyer Rejected",
-      description: "The buyer registration has been rejected.",
-      variant: "destructive",
-    });
+  const handleReject = async (id: string) => {
+    try {
+      await updateProfileApproval(id, 'REJECTED');
+      setProfiles(prev => prev.map(p => 
+        p.id === id ? { ...p, approval_status: 'REJECTED' as const } : p
+      ));
+      toast({
+        title: "Buyer Rejected",
+        description: "The buyer registration has been rejected.",
+        variant: "destructive",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: "Failed to reject buyer",
+        variant: "destructive",
+      });
+    }
   };
 
   const getStatusClass = (status: string) => {
     switch (status) {
-      case "Approved":
+      case "APPROVED":
         return "status-approved";
-      case "Pending":
+      case "PENDING":
         return "status-pending";
-      case "Rejected":
+      case "REJECTED":
         return "status-rejected";
       default:
         return "bg-muted text-muted-foreground";
     }
   };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -72,18 +132,23 @@ const AdminBuyers = () => {
       </div>
 
       {/* Summary Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-4 gap-4">
         <div className="dashboard-card">
-          <p className="text-sm text-muted-foreground">Total Buyers</p>
-          <p className="text-2xl font-bold text-foreground">{buyers.length}</p>
+          <p className="text-sm text-muted-foreground">Active Buyers</p>
+          <p className="text-2xl font-bold text-foreground">{activeBuyers.length}</p>
+          <p className="text-xs text-muted-foreground mt-1">(Pending + Approved)</p>
         </div>
         <div className="dashboard-card">
           <p className="text-sm text-muted-foreground">Pending Approval</p>
-          <p className="text-2xl font-bold text-warning">{buyers.filter(b => b.status === "Pending").length}</p>
+          <p className="text-2xl font-bold text-warning">{activeBuyers.filter(b => b.approval_status === "PENDING").length}</p>
         </div>
         <div className="dashboard-card">
-          <p className="text-sm text-muted-foreground">Active Buyers</p>
-          <p className="text-2xl font-bold text-success">{buyers.filter(b => b.status === "Approved").length}</p>
+          <p className="text-sm text-muted-foreground">Approved Buyers</p>
+          <p className="text-2xl font-bold text-success">{activeBuyers.filter(b => b.approval_status === "APPROVED").length}</p>
+        </div>
+        <div className="dashboard-card">
+          <p className="text-sm text-muted-foreground">Rejected</p>
+          <p className="text-2xl font-bold text-destructive">{buyers.filter(b => b.approval_status === "REJECTED").length}</p>
         </div>
       </div>
 
@@ -129,22 +194,22 @@ const AdminBuyers = () => {
             <tbody>
               {filteredBuyers.map((buyer) => (
                 <tr key={buyer.id}>
-                  <td className="font-medium text-foreground">{buyer.businessName}</td>
-                  <td className="font-mono text-sm">{buyer.gst}</td>
-                  <td>{buyer.contactPerson}</td>
+                  <td className="font-medium text-foreground">{buyer.company_name || 'N/A'}</td>
+                  <td className="font-mono text-sm">{buyer.gst_number || 'N/A'}</td>
+                  <td>{buyer.full_name || 'N/A'}</td>
                   <td>{buyer.email}</td>
                   <td>
-                    <span className={`status-badge ${getStatusClass(buyer.status)}`}>
-                      {buyer.status}
+                    <span className={`status-badge ${getStatusClass(buyer.approval_status || 'PENDING')}`}>
+                      {buyer.approval_status || 'PENDING'}
                     </span>
                   </td>
-                  <td className="text-muted-foreground">{buyer.date}</td>
+                  <td className="text-muted-foreground">{new Date(buyer.created_at).toLocaleDateString()}</td>
                   <td>
                     <div className="flex gap-1">
                       <Button variant="ghost" size="sm">
                         <Eye className="h-4 w-4" />
                       </Button>
-                      {buyer.status === "Pending" && (
+                      {buyer.approval_status === "PENDING" && (
                         <>
                           <Button
                             variant="ghost"

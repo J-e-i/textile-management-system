@@ -4,16 +4,19 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { useToast } from "@/hooks/use-toast";
 import { Eye, EyeOff, ArrowLeft } from "lucide-react";
+import { signIn } from "@/lib/auth";
+import { useAuth } from "@/contexts/AuthContext";
+import { supabase } from "@/lib/supabase";
 
 const Login = () => {
   const navigate = useNavigate();
   const { toast } = useToast();
+  const { setUser } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
   const [formData, setFormData] = useState({
     email: "",
     password: "",
-    role: "buyer" as "buyer" | "admin",
   });
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -27,22 +30,64 @@ const Login = () => {
     e.preventDefault();
     setIsLoading(true);
 
-    // Simulate login
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+    try {
+      const { user } = await signIn(formData.email, formData.password);
+      
+      if (user) {
+        // Get the user's profile to check approval status
+        const { data: profile } = await supabase
+          .from('profiles')
+          .select('role, approval_status')
+          .eq('id', user.id)
+          .single()
 
-    toast({
-      title: "Login Successful",
-      description: `Welcome back! Redirecting to ${formData.role} dashboard...`,
-    });
+        // Determine role from profile or email
+        const userRole = profile?.role === 'admin' ? 'admin' : 'buyer';
+        
+        // Check if buyer is approved (or if they're admin, which doesn't need approval)
+        if (userRole === 'buyer' && profile?.approval_status !== 'APPROVED') {
+          toast({
+            title: "Account Pending Approval",
+            description: "Your account is waiting for admin approval. You'll be able to login once approved.",
+            variant: "destructive",
+          });
+          setIsLoading(false);
+          return;
+        }
 
-    // Navigate based on role
-    if (formData.role === "admin") {
-      navigate("/admin");
-    } else {
-      navigate("/buyer");
+        const authUser = {
+          id: user.id,
+          email: user.email!,
+          role: userRole,
+          full_name: user.user_metadata?.full_name,
+          company_name: user.user_metadata?.company_name,
+        };
+
+        setUser(authUser);
+
+        toast({
+          title: "Login Successful",
+          description: `Welcome back! Redirecting to ${userRole} dashboard...`,
+        });
+
+        // Use setTimeout to avoid navigation conflicts
+        setTimeout(() => {
+          if (userRole === 'admin') {
+            navigate('/admin');
+          } else {
+            navigate('/buyer');
+          }
+        }, 100);
+      }
+    } catch (error: any) {
+      toast({
+        title: "Login Failed",
+        description: error.message || "Invalid email or password",
+        variant: "destructive",
+      });
+    } finally {
+      setIsLoading(false);
     }
-
-    setIsLoading(false);
   };
 
   return (
@@ -73,35 +118,6 @@ const Login = () => {
             <p className="text-muted-foreground">
               Sign in to access your dashboard
             </p>
-          </div>
-
-          {/* Role Selector */}
-          <div className="mb-6">
-            <label className="label-enterprise">Login as</label>
-            <div className="grid grid-cols-2 gap-3">
-              <button
-                type="button"
-                onClick={() => setFormData((prev) => ({ ...prev, role: "buyer" }))}
-                className={`px-4 py-3 rounded-lg border text-sm font-medium transition-colors ${
-                  formData.role === "buyer"
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "bg-background text-foreground border-border hover:bg-muted"
-                }`}
-              >
-                Business Buyer
-              </button>
-              <button
-                type="button"
-                onClick={() => setFormData((prev) => ({ ...prev, role: "admin" }))}
-                className={`px-4 py-3 rounded-lg border text-sm font-medium transition-colors ${
-                  formData.role === "admin"
-                    ? "bg-primary text-primary-foreground border-primary"
-                    : "bg-background text-foreground border-border hover:bg-muted"
-                }`}
-              >
-                Admin
-              </button>
-            </div>
           </div>
 
           {/* Form */}

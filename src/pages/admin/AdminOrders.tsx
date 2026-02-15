@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -8,45 +8,88 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { Search, Eye, FileText } from "lucide-react";
+import { useToast } from "@/hooks/use-toast";
+import { Search, Eye, FileText, Loader2 } from "lucide-react";
 import { Link } from "react-router-dom";
+import { getAllOrders, updateOrderStatus, createQuotation } from "@/lib/business";
+import type { Order } from "@/lib/business";
 
 const AdminOrders = () => {
+  const { toast } = useToast();
+  const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
+  const [orders, setOrders] = useState<Order[]>([]);
 
-  const orders = [
-    { id: "ORD-2024-012", buyer: "ABC Textiles Ltd", fabric: "Premium Cotton Twill", gsm: "180-220", color: "Navy Blue", quantity: "500 meters", status: "Pending", date: "2024-01-18" },
-    { id: "ORD-2024-011", buyer: "Fashion Hub Exports", fabric: "Polyester Crepe", gsm: "120-150", color: "Black", quantity: "1,200 meters", status: "Quoted", date: "2024-01-17" },
-    { id: "ORD-2024-010", buyer: "Metro Garments Ltd", fabric: "Stretch Denim", gsm: "280-320", color: "Indigo", quantity: "2,000 meters", status: "In Production", date: "2024-01-16" },
-    { id: "ORD-2024-009", buyer: "Uniforms Direct", fabric: "Cotton-Poly Blend", gsm: "160-180", color: "White", quantity: "800 meters", status: "Approved", date: "2024-01-15" },
-    { id: "ORD-2024-008", buyer: "Global Fabrics Inc", fabric: "Linen Chambray", gsm: "140-160", color: "Natural", quantity: "350 meters", status: "Delivered", date: "2024-01-10" },
-    { id: "ORD-2024-007", buyer: "Textile World", fabric: "Technical Ripstop", gsm: "100-120", color: "Olive", quantity: "1,500 meters", status: "In Production", date: "2024-01-08" },
-  ];
+  useEffect(() => {
+    const fetchOrders = async () => {
+      try {
+        const data = await getAllOrders();
+        setOrders(data);
+      } catch (error: any) {
+        toast({
+          title: "Error",
+          description: "Failed to load orders",
+          variant: "destructive",
+        });
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchOrders();
+  }, [toast]);
 
   const filteredOrders = orders.filter((order) => {
     const matchesSearch = order.id.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.buyer.toLowerCase().includes(searchQuery.toLowerCase()) ||
-      order.fabric.toLowerCase().includes(searchQuery.toLowerCase());
-    const matchesStatus = statusFilter === "all" || order.status.toLowerCase().replace(" ", "-") === statusFilter;
+      (order as any).profiles?.company_name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+      (order as any).products?.name?.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesStatus = statusFilter === "all" || order.status.toLowerCase() === statusFilter;
     return matchesSearch && matchesStatus;
   });
 
+  const handleUpdateStatus = async (orderId: string, newStatus: Order['status']) => {
+    try {
+      await updateOrderStatus(orderId, newStatus);
+      setOrders(prev => prev.map(o => 
+        o.id === orderId ? { ...o, status: newStatus } : o
+      ));
+      toast({
+        title: "Success",
+        description: "Order status updated successfully",
+      });
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: "Failed to update order status",
+        variant: "destructive",
+      });
+    }
+  };
+
   const getStatusClass = (status: string) => {
     switch (status) {
-      case "In Production":
-      case "Approved":
+      case "PROCESSING":
+      case "PAID":
         return "status-approved";
-      case "Quoted":
+      case "QUOTED":
         return "status-quoted";
-      case "Pending":
+      case "PENDING":
         return "status-pending";
-      case "Delivered":
+      case "DELIVERED":
         return "bg-accent/15 text-accent";
       default:
         return "bg-muted text-muted-foreground";
     }
   };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center items-center h-64">
+        <Loader2 className="h-8 w-8 animate-spin text-primary" />
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
@@ -60,19 +103,19 @@ const AdminOrders = () => {
       <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
         <div className="dashboard-card">
           <p className="text-sm text-muted-foreground">Pending Quote</p>
-          <p className="text-2xl font-bold text-warning">{orders.filter(o => o.status === "Pending").length}</p>
+          <p className="text-2xl font-bold text-warning">{orders.filter(o => o.status === "PENDING").length}</p>
         </div>
         <div className="dashboard-card">
           <p className="text-sm text-muted-foreground">Quoted</p>
-          <p className="text-2xl font-bold text-info">{orders.filter(o => o.status === "Quoted").length}</p>
+          <p className="text-2xl font-bold text-info">{orders.filter(o => o.status === "QUOTED").length}</p>
         </div>
         <div className="dashboard-card">
           <p className="text-sm text-muted-foreground">In Production</p>
-          <p className="text-2xl font-bold text-success">{orders.filter(o => o.status === "In Production").length}</p>
+          <p className="text-2xl font-bold text-success">{orders.filter(o => o.status === "PROCESSING").length}</p>
         </div>
         <div className="dashboard-card">
           <p className="text-sm text-muted-foreground">Delivered</p>
-          <p className="text-2xl font-bold text-accent">{orders.filter(o => o.status === "Delivered").length}</p>
+          <p className="text-2xl font-bold text-accent">{orders.filter(o => o.status === "DELIVERED").length}</p>
         </div>
       </div>
 
@@ -95,8 +138,10 @@ const AdminOrders = () => {
             <SelectItem value="all">All Status</SelectItem>
             <SelectItem value="pending">Pending</SelectItem>
             <SelectItem value="quoted">Quoted</SelectItem>
-            <SelectItem value="approved">Approved</SelectItem>
-            <SelectItem value="in-production">In Production</SelectItem>
+            <SelectItem value="awaiting_payment">Awaiting Payment</SelectItem>
+            <SelectItem value="paid">Paid</SelectItem>
+            <SelectItem value="processing">Processing</SelectItem>
+            <SelectItem value="dispatched">Dispatched</SelectItem>
             <SelectItem value="delivered">Delivered</SelectItem>
           </SelectContent>
         </Select>
@@ -120,27 +165,30 @@ const AdminOrders = () => {
             <tbody>
               {filteredOrders.map((order) => (
                 <tr key={order.id}>
-                  <td className="font-medium text-foreground">{order.id}</td>
-                  <td>{order.buyer}</td>
+                  <td className="font-medium text-foreground">{order.id.substring(0, 8).toUpperCase()}</td>
+                  <td>{(order as any).profiles?.company_name || 'Unknown Buyer'}</td>
                   <td>
                     <div>
-                      <p className="font-medium">{order.fabric}</p>
-                      <p className="text-xs text-muted-foreground">{order.gsm} GSM • {order.color}</p>
+                      <p className="font-medium">{(order as any).products?.name || 'Unknown Product'}</p>
+                      <p className="text-xs text-muted-foreground">
+                        {(order as any).products?.gsm && `${(order as any).products.gsm} GSM • `}
+                        {(order as any).products?.color || 'N/A'}
+                      </p>
                     </div>
                   </td>
-                  <td>{order.quantity}</td>
+                  <td>{order.quantity} meters</td>
                   <td>
                     <span className={`status-badge ${getStatusClass(order.status)}`}>
-                      {order.status}
+                      {order.status.replace('_', ' ')}
                     </span>
                   </td>
-                  <td className="text-muted-foreground">{order.date}</td>
+                  <td className="text-muted-foreground">{new Date(order.created_at).toLocaleDateString()}</td>
                   <td>
                     <div className="flex gap-1">
                       <Button variant="ghost" size="sm">
                         <Eye className="h-4 w-4" />
                       </Button>
-                      {order.status === "Pending" && (
+                      {order.status === "PENDING" && (
                         <Button size="sm" asChild>
                           <Link to={`/admin/quotations/create?order=${order.id}`}>
                             <FileText className="h-4 w-4 mr-1" />
