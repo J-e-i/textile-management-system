@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import {
   LayoutDashboard,
@@ -17,6 +18,7 @@ import {
 const AdminLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const navItems = [
@@ -107,10 +109,10 @@ const AdminLayout = () => {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-sidebar-foreground truncate">
-                  Admin User
+                  {user?.full_name || 'Admin User'}
                 </p>
                 <p className="text-xs text-sidebar-foreground/60 truncate">
-                  admin@textileb2b.com
+                  {user?.email}
                 </p>
               </div>
             </div>

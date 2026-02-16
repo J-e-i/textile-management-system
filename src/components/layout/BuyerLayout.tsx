@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Link, Outlet, useLocation, useNavigate } from "react-router-dom";
+import { useAuth } from "@/contexts/AuthContext";
 import { Button } from "@/components/ui/button";
 import {
   LayoutDashboard,
@@ -16,6 +17,7 @@ import {
 const BuyerLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [sidebarOpen, setSidebarOpen] = useState(false);
 
   const navItems = [
@@ -98,10 +100,10 @@ const BuyerLayout = () => {
               </div>
               <div className="flex-1 min-w-0">
                 <p className="text-sm font-medium text-sidebar-foreground truncate">
-                  ABC Textiles Ltd
+                  {user?.company_name || 'Buyer'}
                 </p>
                 <p className="text-xs text-sidebar-foreground/60 truncate">
-                  buyer@abctextiles.com
+                  {user?.email}
                 </p>
               </div>
             </div>
