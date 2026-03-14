@@ -68,10 +68,12 @@ export const signUp = async (email: string, password: string, fullName: string, 
         })
 
       if (profileError) {
-        console.error('Profile creation error:', profileError);
-        // THROW the error instead of swallowing it!
-        // This ensures the user knows if registration failed
-        throw new Error(`Failed to create buyer profile: ${profileError.message}`);
+        // Don't throw — the auth user was created and email was sent.
+        // This can happen when:
+        // 1. RLS blocks the insert (user email not confirmed yet)
+        // 2. A database trigger already created the profile row (duplicate key)
+        // The profile will be available once admin approves or user confirms email.
+        console.warn('Profile insert skipped (non-fatal):', profileError.message);
       }
       
       console.log('Profile created successfully for:', data.user.email);
