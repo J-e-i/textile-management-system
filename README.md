@@ -49,6 +49,21 @@ Follow these steps to run the project locally:
    npm run dev
    ```
 
+## 🚀 Deployment (Vercel)
+
+This project is optimized for deployment on [Vercel](https://vercel.com/).
+
+### Steps:
+1. **Connect GitHub**: Import your repository into Vercel.
+2. **Environment Variables**: Add the following keys in Vercel Project Settings > Environment Variables:
+   - `VITE_SUPABASE_URL`
+   - `VITE_SUPABASE_ANON_KEY`
+   - `VITE_RAZORPAY_KEY_ID` (if applicable)
+3. **Build Settings**:
+   - Build Command: `npm run build`
+   - Output Directory: `dist`
+4. **Routing**: The included `vercel.json` ensures that all routes redirect to `index.html` for client-side routing.
+
 ## 🔐 Database Security
 
 This project utilizes **Row-Level Security (RLS)** in Supabase to ensure that:
