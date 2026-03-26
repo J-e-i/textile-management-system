@@ -58,7 +58,7 @@ export const printInvoice = (invoice: InvoiceData) => {
   <div class="invoice-container">
     <div class="header">
       <div class="brand">
-        <h1>B2B Textile Platform</h1>
+        <h1>TEXORDER MANAGEMENT SYSTEM</h1>
         <p>Premium Fabric Solutions</p>
       </div>
       <div class="invoice-meta">

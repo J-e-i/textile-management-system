@@ -164,7 +164,7 @@ const Home = () => {
       <section className="py-16 lg:py-24 bg-background">
         <div className="container">
           <div className="text-center mb-12">
-            <h2 className="section-heading">Why Choose TextileB2B</h2>
+            <h2 className="section-heading">Why Choose TEXORDER</h2>
             <p className="section-subheading mx-auto">
               Built for enterprise textile businesses with security and efficiency in mind
             </p>

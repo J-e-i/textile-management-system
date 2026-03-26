@@ -8,8 +8,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Eye, Send, Download, Loader2 } from "lucide-react";
-import { getAllQuotations, createQuotation, getAllOrders, updateOrderStatus } from "@/lib/business";
+import { Eye, Send, Download, Loader2, RefreshCw, AlertCircle } from "lucide-react";
+import { getAllQuotations, createQuotation, getAllOrders, updateOrder } from "@/lib/business";
 import type { Quotation, Order } from "@/lib/business";
 
 const AdminQuotations = () => {
@@ -94,11 +94,15 @@ const AdminQuotations = () => {
         order_id: selectedOrder.id,
         quoted_price: total,
         valid_until: quoteForm.validityDate,
-        status: 'ACTIVE'
+        status: 'ACTIVE',
+        rejection_reason: null
       });
 
-      // Update order status to AWAITING_PAYMENT so buyer can pay
-      await updateOrderStatus(selectedOrder.id, 'AWAITING_PAYMENT');
+      // Update order status and total_amount so buyer can pay the quoted amount
+      await updateOrder(selectedOrder.id, { 
+        status: 'AWAITING_PAYMENT',
+        total_amount: total
+      });
 
       // Update local state
       setQuotations(prev => [newQuotation, ...prev]);
@@ -150,6 +154,7 @@ const AdminQuotations = () => {
       case "ACCEPTED":
         return "status-approved";
       case "EXPIRED":
+      case "REJECTED":
         return "status-rejected";
       default:
         return "bg-muted text-muted-foreground";
@@ -372,7 +377,7 @@ const AdminQuotations = () => {
                             <div class="row"><span class="muted">Status</span><span>${quote.status}</span></div>
                             <hr/>
                             <div class="row total"><span>Quoted amount</span><span>₹${typeof quote.quoted_price === "number" ? quote.quoted_price.toLocaleString() : quote.quoted_price}</span></div>
-                            <p style="margin-top:24px;font-size:12px;color:#888;">Textile Connect. Use Print → Save as PDF to download.</p>
+                            <p style="margin-top:24px;font-size:12px;color:#888;">TEXORDER MANAGEMENT SYSTEM. Use Print → Save as PDF to download.</p>
                             </body></html>
                           `);
                           w.document.close();
@@ -382,6 +387,39 @@ const AdminQuotations = () => {
                       >
                         <Download className="h-4 w-4" />
                       </Button>
+                      {quote.status === 'REJECTED' && (
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          className="text-warning hover:text-warning"
+                          title="Recreate Quotation"
+                          onClick={async () => {
+                            if (!confirm("This will move the order back to 'Needs Quote' state. Continue?")) return;
+                            try {
+                              await updateOrder((quote as any).order_id, { status: 'PENDING' as any });
+                              toast({
+                                title: "Order Reset",
+                                description: "The order is now awaiting a new quotation.",
+                              });
+                              // Refresh orders/quotations
+                              const [quotationsData, ordersData] = await Promise.all([
+                                getAllQuotations(),
+                                getAllOrders()
+                              ]);
+                              setQuotations(quotationsData);
+                              setOrders(ordersData);
+                            } catch (error: any) {
+                              toast({
+                                title: "Error",
+                                description: "Failed to reset order status",
+                                variant: "destructive",
+                              });
+                            }
+                          }}
+                        >
+                          <RefreshCw className="h-4 w-4" />
+                        </Button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -430,6 +468,15 @@ const AdminQuotations = () => {
                 <span className="text-muted-foreground">Quoted amount</span>
                 <span className="font-semibold text-primary">₹{typeof viewQuote.quoted_price === "number" ? viewQuote.quoted_price.toLocaleString() : viewQuote.quoted_price}</span>
               </div>
+              {(viewQuote as any).status === 'REJECTED' && (viewQuote as any).rejection_reason && (
+                <div className="mt-4 p-3 bg-destructive/5 border border-destructive/20 rounded-md">
+                  <div className="flex items-center gap-2 mb-1 text-destructive">
+                    <AlertCircle className="h-4 w-4" />
+                    <span className="text-xs font-semibold uppercase">Rejection Reason</span>
+                  </div>
+                  <p className="text-sm text-foreground">{(viewQuote as any).rejection_reason}</p>
+                </div>
+              )}
             </div>
           )}
         </DialogContent>

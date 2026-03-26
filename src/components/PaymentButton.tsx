@@ -35,7 +35,7 @@ export const PaymentButton: React.FC<PaymentButtonProps> = ({
         key: import.meta.env.VITE_RAZORPAY_KEY_ID || '', // Fallback or loaded from env
         amount: orderData.amount,
         currency: orderData.currency,
-        name: 'B2B Textile Platform',
+        name: 'TEXORDER MANAGEMENT SYSTEM',
         description: `Payment for Order #${order.id.slice(0, 8)}`,
         order_id: orderData.id,
         handler: async function (response: any) {

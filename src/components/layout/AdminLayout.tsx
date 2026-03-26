@@ -65,7 +65,7 @@ const AdminLayout = () => {
               <div className="flex h-8 w-8 items-center justify-center rounded-lg bg-sidebar-primary">
                 <span className="text-sm font-bold text-sidebar-primary-foreground">TX</span>
               </div>
-              <span className="text-lg font-bold text-sidebar-foreground">TextileB2B</span>
+              <span className="text-lg font-bold text-sidebar-foreground">TEXORDER</span>
             </Link>
             <button
               className="lg:hidden text-sidebar-foreground"

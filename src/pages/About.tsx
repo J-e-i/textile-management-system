@@ -45,7 +45,7 @@ const About = () => {
       {/* Hero Section */}
       <section className="container mb-16">
         <div className="max-w-3xl mx-auto text-center">
-          <h1 className="section-heading mb-6">About TextileB2B</h1>
+          <h1 className="section-heading mb-6">About TEXORDER</h1>
           <p className="text-lg text-muted-foreground leading-relaxed">
             For over 25 years, we have been a trusted partner for businesses seeking quality textiles. 
             Our digital B2B platform brings our manufacturing excellence to modern businesses, 
@@ -78,7 +78,7 @@ const About = () => {
             <h2 className="text-2xl font-bold text-foreground mb-4">Our Story</h2>
             <div className="space-y-4 text-muted-foreground">
               <p>
-                Founded in 1998, TextileB2B started as a small weaving unit in Mumbai's textile district. 
+                Founded in 1998, TEXORDER started as a small weaving unit in Mumbai's textile district. 
                 Through dedication to quality and customer service, we have grown into one of the region's 
                 most respected textile manufacturers.
               </p>

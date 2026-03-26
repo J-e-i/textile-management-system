@@ -12,7 +12,7 @@ const Footer = () => {
               <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary-foreground/20">
                 <span className="text-lg font-bold">TX</span>
               </div>
-              <span className="text-xl font-bold">TextileB2B</span>
+              <span className="text-xl font-bold">TEXORDER</span>
             </div>
             <p className="text-primary-foreground/80 text-sm leading-relaxed">
               Digitizing bulk textile orders for modern businesses. Your trusted partner for quality fabrics and seamless B2B transactions.
@@ -103,7 +103,7 @@ const Footer = () => {
         {/* Bottom Bar */}
         <div className="border-t border-primary-foreground/20 mt-8 pt-8 flex flex-col md:flex-row justify-between items-center gap-4">
           <p className="text-sm text-primary-foreground/60">
-            © 2024 TextileB2B. All rights reserved.
+            © 2024 TEXORDER. All rights reserved.
           </p>
           <div className="flex gap-6">
             <span className="text-sm text-primary-foreground/60 hover:text-primary-foreground cursor-pointer transition-colors">

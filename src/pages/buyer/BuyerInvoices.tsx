@@ -82,7 +82,7 @@ const BuyerInvoices = () => {
       <div class="row"><span class="muted">Order Status</span><span>${order?.status ?? "—"}</span></div>
       <div class="row total"><span>Amount</span><span>₹${Number(amount).toLocaleString()}</span></div>
       <span class="status">✅ Paid</span>
-      <p style="margin-top:24px;font-size:12px;color:#888;">B2B Textile Platform. Use browser Print → Save as PDF to download.</p>
+      <p style="margin-top:24px;font-size:12px;color:#888;">TEXORDER MANAGEMENT SYSTEM. Use browser Print → Save as PDF to download.</p>
       </body></html>
     `);
     w.document.close();

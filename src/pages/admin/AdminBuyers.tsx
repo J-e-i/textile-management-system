@@ -8,9 +8,18 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogDescription,
+  DialogFooter,
+} from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Search, CheckCircle, XCircle, Eye, Loader2 } from "lucide-react";
-import { getAllProfiles, updateProfileApproval } from "@/lib/business";
+import { Search, CheckCircle, XCircle, Eye, Loader2, Calendar, Mail, Phone, Building2, Fingerprint, ExternalLink } from "lucide-react";
+import { supabase } from "@/lib/supabase";
+import { getAllProfiles, updateProfileApproval, deleteBuyerCompletely } from "@/lib/business";
 import type { Profile } from "@/lib/business";
 
 const AdminBuyers = () => {
@@ -19,25 +28,28 @@ const AdminBuyers = () => {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState("all");
   const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [selectedBuyer, setSelectedBuyer] = useState<Profile | null>(null);
+  const [isDetailsOpen, setIsDetailsOpen] = useState(false);
+
+  const fetchProfiles = async () => {
+    try {
+      setLoading(true);
+      const data = await getAllProfiles();
+      setProfiles(data);
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: "Failed to load buyer profiles",
+        variant: "destructive",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchProfiles = async () => {
-      try {
-        const data = await getAllProfiles();
-        setProfiles(data);
-      } catch (error: any) {
-        toast({
-          title: "Error",
-          description: "Failed to load buyer profiles",
-          variant: "destructive",
-        });
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchProfiles();
-  }, [toast]);
+  }, []);
 
   // Filter only buyers
   const buyers = profiles.filter(p => p.role === 'buyer');
@@ -75,7 +87,7 @@ const AdminBuyers = () => {
           title: "Success", 
           description: data.message || "Buyer approved and email confirmed!" 
         });
-        fetchBuyers(); // Refresh the list
+        fetchProfiles(); // Refresh the list
       }
     } catch (error: any) {
       toast({ title: "Error", description: "Failed to approve buyer" });
@@ -83,23 +95,33 @@ const AdminBuyers = () => {
   };
 
   const handleReject = async (id: string) => {
+    if (!confirm("Are you sure you want to reject and PERMANENTLY delete this buyer? This will also remove their login access.")) {
+      return;
+    }
+
     try {
-      await updateProfileApproval(id, 'REJECTED');
-      setProfiles(prev => prev.map(p => 
-        p.id === id ? { ...p, approval_status: 'REJECTED' as const } : p
-      ));
+      await deleteBuyerCompletely(id);
+      setProfiles(prev => prev.filter(p => p.id !== id));
       toast({
-        title: "Buyer Rejected",
-        description: "The buyer registration has been rejected.",
+        title: "Buyer Removed",
+        description: "The buyer has been rejected and completely removed from the system.",
         variant: "destructive",
       });
+      if (selectedBuyer?.id === id) {
+        setIsDetailsOpen(false);
+      }
     } catch (error: any) {
       toast({
         title: "Error",
-        description: "Failed to reject buyer",
+        description: error.message || "Failed to remove buyer. Make sure the RPC function is installed.",
         variant: "destructive",
       });
     }
+  };
+
+  const openBuyerDetails = (buyer: Profile) => {
+    setSelectedBuyer(buyer);
+    setIsDetailsOpen(true);
   };
 
   const getStatusClass = (status: string) => {
@@ -203,10 +225,10 @@ const AdminBuyers = () => {
                       {buyer.approval_status || 'PENDING'}
                     </span>
                   </td>
-                  <td className="text-muted-foreground">{new Date(buyer.created_at).toLocaleDateString()}</td>
+                  <td className="text-muted-foreground">{new Date(buyer.created_at || '').toLocaleDateString()}</td>
                   <td>
                     <div className="flex gap-1">
-                      <Button variant="ghost" size="sm">
+                      <Button variant="ghost" size="sm" onClick={() => openBuyerDetails(buyer)}>
                         <Eye className="h-4 w-4" />
                       </Button>
                       {buyer.approval_status === "PENDING" && (
@@ -242,6 +264,127 @@ const AdminBuyers = () => {
           </div>
         )}
       </div>
+
+      {/* Buyer Details Dialog */}
+      <Dialog open={isDetailsOpen} onOpenChange={setIsDetailsOpen}>
+        <DialogContent className="sm:max-w-[500px]">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Building2 className="h-5 w-5 text-primary" />
+              Buyer Details
+            </DialogTitle>
+            <DialogDescription>
+              Detailed information for {selectedBuyer?.company_name}
+            </DialogDescription>
+          </DialogHeader>
+
+          {selectedBuyer && (
+            <div className="grid gap-4 py-4">
+              <div className="grid grid-cols-4 items-center gap-4">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Fingerprint className="h-4 w-4" />
+                  <span className="text-sm font-medium">Business</span>
+                </div>
+                <div className="col-span-3 text-sm font-semibold text-foreground">
+                  {selectedBuyer.company_name}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-4 items-center gap-4">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <div className="w-4 flex justify-center font-bold text-[10px] border border-muted-foreground rounded-[2px]">G</div>
+                  <span className="text-sm font-medium">GST</span>
+                </div>
+                <div className="col-span-3 flex items-center gap-2">
+                  <span className="font-mono text-xs bg-muted p-1 px-2 rounded w-fit">
+                    {selectedBuyer.gst_number}
+                  </span>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="h-7 px-2 text-[10px] gap-1"
+                    onClick={() => window.open(`https://services.gst.gov.in/services/searchtp`, '_blank')}
+                  >
+                    <ExternalLink className="h-3 w-3" />
+                    Verify GST
+                  </Button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-4 items-center gap-4">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Building2 className="h-4 w-4" />
+                  <span className="text-sm font-medium">Contact</span>
+                </div>
+                <div className="col-span-3 text-sm">
+                  {selectedBuyer.full_name}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-4 items-center gap-4">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Mail className="h-4 w-4" />
+                  <span className="text-sm font-medium">Email</span>
+                </div>
+                <div className="col-span-3 text-sm">
+                  {selectedBuyer.email}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-4 items-center gap-4">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Calendar className="h-4 w-4" />
+                  <span className="text-sm font-medium">Joined</span>
+                </div>
+                <div className="col-span-3 text-sm">
+                  {new Date(selectedBuyer.created_at || '').toLocaleDateString()} at {new Date(selectedBuyer.created_at || '').toLocaleTimeString()}
+                </div>
+              </div>
+
+              <div className="grid grid-cols-4 items-center gap-4">
+                <div className="flex items-center gap-2 text-muted-foreground">
+                  <Loader2 className="h-4 w-4" />
+                  <span className="text-sm font-medium">Status</span>
+                </div>
+                <div className="col-span-3">
+                  <span className={`status-badge ${getStatusClass(selectedBuyer.approval_status || 'PENDING')}`}>
+                    {selectedBuyer.approval_status || 'PENDING'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          <DialogFooter className="gap-2 sm:gap-0">
+            {(selectedBuyer?.approval_status === 'PENDING' || selectedBuyer?.approval_status === 'REJECTED') && (
+              <Button 
+                variant="outline" 
+                className="text-destructive border-destructive/20 hover:bg-destructive/10"
+                onClick={() => handleReject(selectedBuyer.id)}
+              >
+                <XCircle className="mr-2 h-4 w-4" />
+                {selectedBuyer?.approval_status === 'REJECTED' ? 'Delete Permanently' : 'Reject & Delete'}
+              </Button>
+            )}
+            
+            {selectedBuyer?.approval_status === 'PENDING' && (
+              <Button 
+                onClick={() => {
+                  handleApprove(selectedBuyer.id);
+                  setIsDetailsOpen(false);
+                }}
+                className="bg-success hover:bg-success/90 text-white"
+              >
+                <CheckCircle className="mr-2 h-4 w-4" />
+                Approve Buyer
+              </Button>
+            )}
+            <Button variant="ghost" onClick={() => setIsDetailsOpen(false)}>
+              Close
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };

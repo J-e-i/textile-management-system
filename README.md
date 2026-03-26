@@ -1,73 +1,57 @@
-# Welcome to your Lovable project
+# Textile Connect Pro (TEXORDER Management System)
 
-## Project info
+A robust B2B marketplace platform designed for the textile industry to bridge the gap between buyers and manufacturers through a digitized order-to-cash workflow.
 
-**URL**: https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID
+## 🚀 Overview
 
-## How can I edit this code?
+Textile Connect Pro streamlines the complex process of bulk textile procurement. It replaces traditional manual negotiations with a structured digital journey, ensuring transparency, legitimacy, and efficiency for both buyers and administrators.
 
-There are several ways of editing your application.
+## ✨ Key Features
 
-**Use Lovable**
+### 🏢 Buyer Experience
+- **Verified Onboarding**: Business registration with mandatory GST verification.
+- **Bulk Ordering**: Request high-volume fabric orders with specific GSM and color requirements.
+- **Quotation Feedback**: Receive, review, accept, or reject official quotations with detailed feedback.
+- **Secure Payments**: Integrated Razorpay gateway for seamless transactions.
+- **Digital Invoicing**: Automated generation and tracking of tax-compliant invoices.
 
-Simply visit the [Lovable Project](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and start prompting.
+### 🛠 Admin Capabilities
+- **Buyer Management**: Review registrations, verify GST details (integrated search), and approve/reject business accounts.
+- **Quotation Engine**: Generate detailed quotes (including tax and delivery) for bulk inquiries.
+- **Inventory & Order Tracking**: Real-time monitoring of order statuses from "Needs Quote" to "Delivered".
+- **Financial Dashboard**: Overview of payments, pending dues, and revenue metrics.
 
-Changes made via Lovable will be committed automatically to this repo.
+## 🛠 Tech Stack
 
-**Use your preferred IDE**
+- **Frontend**: [React](https://reactjs.org/) + [Vite](https://vitejs.dev/)
+- **Styling**: [Tailwind CSS](https://tailwindcss.com/) + [shadcn/ui](https://ui.shadcn.com/)
+- **Backend/Database**: [Supabase](https://supabase.com/) (PostgreSQL + RLS)
+- **Icons**: [Lucide React](https://lucide.dev/)
+- **Payments**: [Razorpay](https://razorpay.com/)
 
-If you want to work locally using your own IDE, you can clone this repo and push changes. Pushed changes will also be reflected in Lovable.
+## 🛠 Local Setup
 
-The only requirement is having Node.js & npm installed - [install with nvm](https://github.com/nvm-sh/nvm#installing-and-updating)
+Follow these steps to run the project locally:
 
-Follow these steps:
+1. **Clone the repository**:
+   ```sh
+   git clone <YOUR_GIT_URL>
+   cd textile-connect-pro
+   ```
+2. **Install dependencies**:
+   ```sh
+   npm install
+   ```
+3. **Set up Environment Variables**:
+   Create a `.env` file with your Supabase and Razorpay credentials.
+4. **Run the development server**:
+   ```sh
+   npm run dev
+   ```
 
-```sh
-# Step 1: Clone the repository using the project's Git URL.
-git clone <YOUR_GIT_URL>
+## 🔐 Database Security
 
-# Step 2: Navigate to the project directory.
-cd <YOUR_PROJECT_NAME>
-
-# Step 3: Install the necessary dependencies.
-npm i
-
-# Step 4: Start the development server with auto-reloading and an instant preview.
-npm run dev
-```
-
-**Edit a file directly in GitHub**
-
-- Navigate to the desired file(s).
-- Click the "Edit" button (pencil icon) at the top right of the file view.
-- Make your changes and commit the changes.
-
-**Use GitHub Codespaces**
-
-- Navigate to the main page of your repository.
-- Click on the "Code" button (green button) near the top right.
-- Select the "Codespaces" tab.
-- Click on "New codespace" to launch a new Codespace environment.
-- Edit files directly within the Codespace and commit and push your changes once you're done.
-
-## What technologies are used for this project?
-
-This project is built with:
-
-- Vite
-- TypeScript
-- React
-- shadcn-ui
-- Tailwind CSS
-
-## How can I deploy this project?
-
-Simply open [Lovable](https://lovable.dev/projects/REPLACE_WITH_PROJECT_ID) and click on Share -> Publish.
-
-## Can I connect a custom domain to my Lovable project?
-
-Yes, you can!
-
-To connect a domain, navigate to Project > Settings > Domains and click Connect Domain.
-
-Read more here: [Setting up a custom domain](https://docs.lovable.dev/features/custom-domain#custom-domain)
+This project utilizes **Row-Level Security (RLS)** in Supabase to ensure that:
+- Buyers can only access and update their own orders and quotations.
+- Admins have complete visibility and management rights across all platform data.
+- API keys are protected and never exposed in the client-side code where sensitive data is involved.

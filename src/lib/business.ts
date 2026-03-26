@@ -117,16 +117,20 @@ export const getAllOrders = async (): Promise<Order[]> => {
   }
 }
 
-export const updateOrderStatus = async (orderId: string, status: Order['status']): Promise<Order> => {
+export const updateOrder = async (orderId: string, updates: Partial<Order>): Promise<Order> => {
   const { data, error } = await supabase
     .from('orders')
-    .update({ status })
+    .update(updates)
     .eq('id', orderId)
     .select()
     .single()
 
   if (error) throw error
   return data
+}
+
+export const updateOrderStatus = async (orderId: string, status: Order['status']): Promise<Order> => {
+  return updateOrder(orderId, { status })
 }
 
 // ============================
@@ -206,6 +210,29 @@ export const acceptQuotation = async (quotationId: string): Promise<Quotation> =
   return quotationData
 }
 
+export const rejectQuotation = async (quotationId: string, reason: string): Promise<Quotation> => {
+  // Update quotation status and reason
+  const { data: quotationData, error: quotationError } = await supabase
+    .from('quotation')
+    .update({ 
+      status: 'REJECTED',
+      rejection_reason: reason 
+    })
+    .eq('id', quotationId)
+    .select()
+    .single()
+
+  if (quotationError) throw quotationError
+
+  // Update order status back to PENDING so admin can recreate it
+  await supabase
+    .from('orders')
+    .update({ status: 'PENDING' })
+    .eq('id', quotationData.order_id)
+
+  return quotationData
+}
+
 // ============================
 // PROFILES (Buyer Management)
 // ============================
@@ -271,7 +298,6 @@ export const updateProfileApproval = async (profileId: string, approvalStatus: P
 
   return data
 }
-
 export const updateProfile = async (profileId: string, updates: Partial<Profile>): Promise<Profile> => {
   const { data, error } = await supabase
     .from('profiles')
@@ -282,6 +308,22 @@ export const updateProfile = async (profileId: string, updates: Partial<Profile>
 
   if (error) throw error
   return data
+}
+
+export const deleteBuyerCompletely = async (buyerId: string): Promise<void> => {
+  const { data, error } = await supabase.rpc('delete_buyer_completely', {
+    buyer_id: buyerId
+  });
+
+  if (error) {
+    console.error('Error calling delete_buyer_completely:', error);
+    throw error;
+  }
+
+  const result = data as { success: boolean, message: string };
+  if (result && result.success === false) {
+    throw new Error(result.message || 'Failed to delete buyer completely');
+  }
 }
 
 // ============================

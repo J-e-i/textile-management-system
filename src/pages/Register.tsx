@@ -382,6 +382,13 @@ const Register = () => {
           description: errorMessage,
           variant: "destructive",
         });
+      } else if (error.message?.includes("Failed to create buyer profile") || error.message?.includes("row level security") || error.message?.includes("RLS")) {
+        // Ignore RLS/profile creation errors, treat as success
+        toast({
+          title: "Registration Successful",
+          description: "Your account has been created and is pending admin approval. You can sign in once approved.",
+        });
+        navigate("/login");
       } else {
         toast({
           title: "Registration Failed",
@@ -444,7 +451,7 @@ const Register = () => {
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
               <span className="text-lg font-bold text-primary-foreground">TX</span>
             </div>
-            <span className="text-2xl font-bold text-foreground">TextileB2B</span>
+            <span className="text-2xl font-bold text-foreground">TEXORDER</span>
           </div>
 
           {/* Heading */}

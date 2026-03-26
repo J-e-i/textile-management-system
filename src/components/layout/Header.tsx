@@ -42,7 +42,7 @@ const Header = () => {
           <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary">
             <span className="text-lg font-bold text-primary-foreground">TX</span>
           </div>
-          <span className="text-xl font-bold text-foreground">TextileB2B</span>
+          <span className="text-xl font-bold text-foreground">TEXORDER</span>
         </Link>
 
         {/* Desktop Navigation */}

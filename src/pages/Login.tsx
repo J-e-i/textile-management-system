@@ -58,7 +58,7 @@ const Login = () => {
         const authUser = {
           id: user.id,
           email: user.email!,
-          role: userRole,
+          role: profile.role as 'admin' | 'buyer',
           full_name: user.user_metadata?.full_name,
           company_name: user.user_metadata?.company_name,
         };
@@ -109,7 +109,7 @@ const Login = () => {
             <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-primary">
               <span className="text-lg font-bold text-primary-foreground">TX</span>
             </div>
-            <span className="text-2xl font-bold text-foreground">TextileB2B</span>
+            <span className="text-2xl font-bold text-foreground">TEXORDER</span>
           </div>
 
           {/* Heading */}

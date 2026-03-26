@@ -54,29 +54,27 @@ export const signUp = async (email: string, password: string, fullName: string, 
     // Only create profile if user was created successfully
     if (data.user) {
       console.log('Creating profile for user:', data.user.id, data.user.email);
-      
-      const { error: profileError } = await supabase
-        .from('profiles')
-        .insert({
-          id: data.user.id,
-          email: data.user.email!,
-          full_name: fullName,
-          company_name: companyName,
-          gst_number: gstNumber,
-          role: 'buyer',
-          approval_status: 'PENDING',
-        })
-
-      if (profileError) {
-        // Don't throw — the auth user was created and email was sent.
-        // This can happen when:
-        // 1. RLS blocks the insert (user email not confirmed yet)
-        // 2. A database trigger already created the profile row (duplicate key)
-        // The profile will be available once admin approves or user confirms email.
-        console.warn('Profile insert skipped (non-fatal):', profileError.message);
+      try {
+        const { error: profileError } = await supabase
+          .from('profiles')
+          .upsert({
+            id: data.user.id,
+            email: data.user.email!,
+            full_name: fullName,
+            company_name: companyName,
+            gst_number: gstNumber,
+            role: 'buyer',
+            approval_status: 'PENDING',
+          }, { onConflict: 'id' });
+        if (profileError) {
+          // Log but do not throw error for RLS/profile creation
+          console.error('Profile creation error (ignored for user):', profileError);
+        }
+      } catch (profileError) {
+        // Log but do not throw error for RLS/profile creation
+        console.error('Profile creation exception (ignored for user):', profileError);
       }
-      
-      console.log('Profile created successfully for:', data.user.email);
+      console.log('Profile creation attempted for:', data.user.email);
     } else {
       throw new Error('Failed to create auth account');
     }

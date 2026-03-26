@@ -4,10 +4,15 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
+  DialogDescription,
+  DialogFooter,
 } from "@/components/ui/dialog";
 import { Download, Eye, CheckCircle, Clock } from "lucide-react";
 import { useState, useEffect } from "react";
-import { getQuotationsForBuyer } from "@/lib/business-real";
+import { getAllQuotations, acceptQuotation, rejectQuotation } from "@/lib/business";
+import { Textarea } from "@/components/ui/textarea";
+import { useToast } from "@/hooks/use-toast";
+import { XCircle } from "lucide-react";
 
 /** Row from quotation table (admin-created) with joined order & product */
 interface QuotationRow {
@@ -16,6 +21,7 @@ interface QuotationRow {
   quoted_price: number;
   valid_until: string;
   status: string;
+  rejection_reason?: string | null;
   created_at: string;
   orders?: {
     id: string;
@@ -40,6 +46,8 @@ interface QuotationDisplay {
   grand_total: number;
   valid_until: string;
   status: string;
+  order_status: string;
+  rejection_reason: string | null;
   created_at: string;
 }
 
@@ -61,6 +69,8 @@ function mapRowToDisplay(row: QuotationRow): QuotationDisplay {
     grand_total: row.quoted_price,
     valid_until: row.valid_until,
     status: row.status,
+    order_status: order?.status ?? 'PENDING',
+    rejection_reason: row.rejection_reason ?? null,
     created_at: row.created_at,
   };
 }
@@ -81,16 +91,13 @@ function openQuotationPrintWindow(quote: QuotationDisplay) {
     <h1>Quotation ${quote.quotation_number}</h1>
     <p class="muted">Order ID: ${(quote.order_id || "").slice(0, 8).toUpperCase()}</p>
     <div class="row"><span class="muted">Fabric</span><span>${quote.fabric}</span></div>
-    <div class="row"><span class="muted">Quantity</span><span>${quote.quantity}</span></div>
+    <div class="row"><span class="muted">Quantity</span><span>${quote.quantity} meters</span></div>
     <div class="row"><span class="muted">Valid until</span><span>${quote.valid_until ? new Date(quote.valid_until).toLocaleDateString() : "N/A"}</span></div>
     <div class="row"><span class="muted">Status</span><span>${quote.status}</span></div>
     <hr/>
-    <div class="row"><span class="muted">Price/Unit</span><span>₹${quote.unit_price?.toLocaleString()}</span></div>
-    <div class="row"><span class="muted">Subtotal</span><span>₹${quote.total_amount?.toLocaleString()}</span></div>
-    <div class="row"><span class="muted">Tax (18% GST)</span><span>₹${quote.tax?.toLocaleString()}</span></div>
-    <div class="row"><span class="muted">Delivery</span><span>₹${quote.delivery_charge?.toLocaleString()}</span></div>
-    <div class="row total"><span>Grand Total</span><span>₹${quote.grand_total?.toLocaleString()}</span></div>
-    <p style="margin-top:24px;font-size:12px;color:#888;">Generated from Textile Connect. Use browser Print → Save as PDF to download.</p>
+    <div class="row total"><span>Quoted amount</span><span>₹${quote.grand_total?.toLocaleString()}</span></div>
+    <p class="muted" style="font-size: 10px; margin-top: -10px;">* Includes Tax & Delivery charges</p>
+    <p style="margin-top:24px;font-size:12px;color:#888;">Generated from TEXORDER MANAGEMENT SYSTEM. Use browser Print → Save as PDF to download.</p>
     </body></html>
   `);
   w.document.close();
@@ -102,21 +109,63 @@ const BuyerQuotations = () => {
   const [quotations, setQuotations] = useState<QuotationDisplay[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewQuote, setViewQuote] = useState<QuotationDisplay | null>(null);
+  const [rejectingQuote, setRejectingQuote] = useState<QuotationDisplay | null>(null);
+  const [rejectionReason, setRejectionReason] = useState("");
+  const { toast } = useToast();
+
+  const fetchQuotations = async () => {
+    try {
+      setLoading(true);
+      const data = await getAllQuotations();
+      setQuotations((data as QuotationRow[]).map(mapRowToDisplay));
+    } catch (error: any) {
+      console.error('Failed to fetch quotations:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
-    const fetchQuotations = async () => {
-      try {
-        const data = await getQuotationsForBuyer();
-        setQuotations((data as QuotationRow[]).map(mapRowToDisplay));
-      } catch (error: any) {
-        console.error('Failed to fetch quotations:', error);
-      } finally {
-        setLoading(false);
-      }
-    };
-
     fetchQuotations();
   }, []);
+
+  const handleAccept = async (quote: QuotationDisplay) => {
+    try {
+      if (!confirm("Are you sure you want to accept this quotation? This will move your order to the payment stage.")) return;
+      await acceptQuotation(quote.id);
+      toast({
+        title: "Quotation Accepted",
+        description: "Your order is now awaiting payment.",
+      });
+      fetchQuotations();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: "Failed to accept quotation",
+        variant: "destructive",
+      });
+    }
+  };
+
+  const handleReject = async () => {
+    if (!rejectingQuote || !rejectionReason.trim()) return;
+    try {
+      await rejectQuotation(rejectingQuote.id, rejectionReason);
+      toast({
+        title: "Quotation Rejected",
+        description: "Your feedback has been sent to the admin.",
+      });
+      setRejectingQuote(null);
+      setRejectionReason("");
+      fetchQuotations();
+    } catch (error: any) {
+      toast({
+        title: "Error",
+        description: "Failed to reject quotation",
+        variant: "destructive",
+      });
+    }
+  };
 
   if (loading) {
     return <div>Loading quotations...</div>;
@@ -147,11 +196,13 @@ const BuyerQuotations = () => {
                   <span className={`status-badge ${
                     quote.status === 'ACCEPTED' ? "status-approved" :
                     quote.status === 'ACTIVE' ? "status-pending" :
-                    quote.status === 'EXPIRED' ? "status-default" :
+                    quote.status === 'REJECTED' ? "status-rejected" :
                     "status-default"
                   }`}>
                     {quote.status === 'ACCEPTED' ? (
                       <><CheckCircle className="h-3 w-3 mr-1" /> Accepted</>
+                    ) : quote.status === 'REJECTED' ? (
+                      <><XCircle className="h-3 w-3 mr-1" /> Rejected</>
                     ) : quote.status === 'EXPIRED' ? (
                       <>Expired</>
                     ) : (
@@ -185,21 +236,12 @@ const BuyerQuotations = () => {
               <div className="lg:w-64 lg:border-l lg:pl-6 border-border">
                 <div className="space-y-2 text-sm">
                   <div className="flex justify-between">
-                    <span className="text-muted-foreground">Price/Unit</span>
-                    <span className="text-foreground">₹{quote.unit_price?.toLocaleString()}</span>
+                    <span className="text-muted-foreground">Quoted Amount</span>
+                    <span className="text-foreground">₹{quote.grand_total?.toLocaleString()}</span>
                   </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Subtotal</span>
-                    <span className="text-foreground">₹{quote.total_amount?.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Tax (18% GST)</span>
-                    <span className="text-foreground">₹{quote.tax?.toLocaleString()}</span>
-                  </div>
-                  <div className="flex justify-between">
-                    <span className="text-muted-foreground">Delivery</span>
-                    <span className="text-foreground">₹{quote.delivery_charge?.toLocaleString()}</span>
-                  </div>
+                  <p className="text-[10px] text-muted-foreground italic text-right mt-1">
+                    * Includes Tax & Delivery
+                  </p>
                   <div className="flex justify-between pt-2 border-t border-border font-semibold">
                     <span className="text-foreground">Grand Total</span>
                     <span className="text-primary">₹{quote.grand_total?.toLocaleString()}</span>
@@ -218,6 +260,28 @@ const BuyerQuotations = () => {
                 <Download className="h-4 w-4 mr-2" />
                 Download PDF
               </Button>
+              {quote.status === 'ACTIVE' && quote.order_status === 'AWAITING_PAYMENT' && (
+                <>
+                  <Button 
+                    variant="default" 
+                    size="sm" 
+                    className="bg-success hover:bg-success/90"
+                    onClick={() => handleAccept(quote)}
+                  >
+                    <CheckCircle className="h-4 w-4 mr-2" />
+                    Accept & Continue
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    size="sm" 
+                    className="text-destructive border-destructive/20 hover:bg-destructive/10"
+                    onClick={() => setRejectingQuote(quote)}
+                  >
+                    <XCircle className="h-4 w-4 mr-2" />
+                    Reject
+                  </Button>
+                </>
+              )}
             </div>
           </div>
         ))}
@@ -258,8 +322,47 @@ const BuyerQuotations = () => {
                 <span className="text-muted-foreground">Grand total</span>
                 <span className="font-semibold text-primary">₹{viewQuote.grand_total?.toLocaleString()}</span>
               </div>
+              {viewQuote.status === 'REJECTED' && viewQuote.rejection_reason && (
+                <div className="mt-4 p-3 bg-destructive/5 border border-destructive/20 rounded-md">
+                  <span className="text-xs font-semibold text-destructive uppercase block mb-1">Rejection Reason</span>
+                  <p className="text-sm text-foreground">{viewQuote.rejection_reason}</p>
+                </div>
+              )}
             </div>
           )}
+        </DialogContent>
+      </Dialog>
+
+      {/* Rejection Dialog */}
+      <Dialog open={!!rejectingQuote} onOpenChange={(open) => !open && setRejectingQuote(null)}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Reject Quotation</DialogTitle>
+            <DialogDescription>
+              Please provide a reason for rejecting this quotation. This feedback will help us provide a better quote.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-4 py-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Rejection Reason</label>
+              <Textarea 
+                placeholder="e.g., Price is too high, Delivery time is too long..."
+                value={rejectionReason}
+                onChange={(e) => setRejectionReason(e.target.value)}
+                className="min-h-[100px]"
+              />
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setRejectingQuote(null)}>Cancel</Button>
+            <Button 
+              variant="destructive" 
+              onClick={handleReject}
+              disabled={!rejectionReason.trim()}
+            >
+              Confirm Rejection
+            </Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

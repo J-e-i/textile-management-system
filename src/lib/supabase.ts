@@ -130,7 +130,8 @@ export type Database = {
           order_id: string
           quoted_price: number
           valid_until: string
-          status: 'ACTIVE' | 'ACCEPTED' | 'EXPIRED'
+          status: 'ACTIVE' | 'ACCEPTED' | 'EXPIRED' | 'REJECTED'
+          rejection_reason: string | null
           created_at: string
         }
         Insert: {
@@ -138,7 +139,8 @@ export type Database = {
           order_id: string
           quoted_price: number
           valid_until: string
-          status?: 'ACTIVE' | 'ACCEPTED' | 'EXPIRED'
+          status?: 'ACTIVE' | 'ACCEPTED' | 'EXPIRED' | 'REJECTED'
+          rejection_reason?: string | null
           created_at?: string
         }
         Update: {
@@ -146,7 +148,8 @@ export type Database = {
           order_id?: string
           quoted_price?: number
           valid_until?: string
-          status?: 'ACTIVE' | 'ACCEPTED' | 'EXPIRED'
+          status?: 'ACTIVE' | 'ACCEPTED' | 'EXPIRED' | 'REJECTED'
+          rejection_reason?: string | null
           created_at?: string
         }
       }

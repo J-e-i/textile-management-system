@@ -34,39 +34,53 @@ serve(async (req) => {
   }
 
   try {
-    const { rzp_payment_id, rzp_order_id, rzp_signature, db_order_id, amount } = await req.json()
+    const body = await req.json()
+    console.log('Received verification request:', body)
+    
+    const { rzp_payment_id, rzp_order_id, rzp_signature, db_order_id, amount } = body
 
     if (!rzp_payment_id || !rzp_order_id || !rzp_signature || !db_order_id) {
+       console.error('Missing parameters:', { rzp_payment_id, rzp_order_id, rzp_signature, db_order_id })
        throw new Error("Missing required payment verification parameters")
     }
 
     const rzpKeySecret = Deno.env.get('RAZORPAY_KEY_SECRET') || ''
+    if (!rzpKeySecret) {
+      console.error('RAZORPAY_KEY_SECRET is not set in environment variables')
+      throw new Error("Server configuration error: missing payment secret")
+    }
 
     // 1. Verify Signature
-    // Format: HMAC SHA256 of "rzp_order_id|rzp_payment_id" using secret key
     const payload = `${rzp_order_id}|${rzp_payment_id}`;
     const isValidSignature = await verifySignature(payload, rzp_signature, rzpKeySecret);
 
     if (!isValidSignature) {
+       console.error('Signature verification failed for payload:', payload)
        throw new Error("Invalid payment signature")
     }
 
+    console.log('Signature verified successfully. Proceeding to database updates...')
+
     // 2. Signature is valid, update Supabase database!
-    // We use the SERVICE_ROLE key here because RLS might prevent the user from inserting gracefully 
-    // depending on policies, or we want high-privilege access to finalize the payment record.
     const supabaseAdmin = createClient(
       Deno.env.get('SUPABASE_URL') ?? '',
       Deno.env.get('SUPABASE_SERVICE_ROLE_KEY') ?? ''
     )
 
     // Check if payment already exists
-    const { data: existingPayment } = await supabaseAdmin
+    const { data: existingPayment, error: checkError } = await supabaseAdmin
       .from('payments')
       .select('id')
       .eq('transaction_reference', rzp_payment_id)
-      .single()
+      .maybeSingle()
+
+    if (checkError) {
+      console.error('Error checking for existing payment:', checkError)
+      throw new Error(`Database error: ${checkError.message}`)
+    }
 
     if (existingPayment) {
+        console.log('Payment already exists, returning success.')
         return new Response(JSON.stringify({ success: true, message: 'Payment already logged' }), {
           headers: { ...corsHeaders, 'Content-Type': 'application/json' },
           status: 200,
@@ -74,6 +88,7 @@ serve(async (req) => {
     }
 
     // Insert payment record
+    console.log('Inserting payment record...')
     const { error: insertError } = await supabaseAdmin
       .from('payments')
       .insert({
@@ -86,13 +101,22 @@ serve(async (req) => {
         paid_at: new Date().toISOString()
       })
 
-    if (insertError) throw insertError
+    if (insertError) {
+      console.error('Payment insertion error:', insertError)
+      throw insertError
+    }
 
     // Update the orders table status to 'PAID'
-    await supabaseAdmin
+    console.log('Updating order status to PAID...')
+    const { error: orderError } = await supabaseAdmin
       .from('orders')
       .update({ status: 'PAID' })
       .eq('id', db_order_id)
+    
+    if (orderError) {
+      console.error('Order status update error (PAID):', orderError)
+      throw orderError
+    }
 
     // 3. Auto-generate Invoice
     const now = new Date()
@@ -100,12 +124,12 @@ serve(async (req) => {
     const randomSuffix = Math.floor(1000 + Math.random() * 9000)
     const invoiceNumber = `INV-${dateStr}-${randomSuffix}`
 
-    // Check if invoice already exists for this order
+    console.log('Generating invoice...', invoiceNumber)
     const { data: existingInvoice } = await supabaseAdmin
       .from('invoices')
       .select('id')
       .eq('order_id', db_order_id)
-      .single()
+      .maybeSingle()
 
     if (!existingInvoice) {
       const { error: invoiceError } = await supabaseAdmin
@@ -118,21 +142,23 @@ serve(async (req) => {
 
       if (invoiceError) {
         console.error('Invoice creation error:', invoiceError)
-        // Don't throw — payment is already recorded, invoice is best-effort
       }
     }
 
     // 4. Auto-dispatch: Update order status to DISPATCHED
+    console.log('Updating order status to DISPATCHED...')
     await supabaseAdmin
       .from('orders')
       .update({ status: 'DISPATCHED' })
       .eq('id', db_order_id)
 
+    console.log('All steps completed successfully.')
     return new Response(JSON.stringify({ success: true, message: 'Payment verified, invoice generated, order dispatched.' }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 200,
     })
   } catch (error) {
+    console.error('Verification Function Catch:', error.message)
     return new Response(JSON.stringify({ error: error.message }), {
       headers: { ...corsHeaders, 'Content-Type': 'application/json' },
       status: 400,
